@@ -1,21 +1,47 @@
 name: macOS AU Build
+
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
+
 jobs:
   build-au:
     runs-on: macos-14
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select Xcode toolchain
+        run: xcode-select -p
+
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-      - name: Build AU
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+
+      - name: Build Audio Unit
         run: cmake --build build --config Release --target Juno60AU_AU --parallel 3
-      - name: Upload Audio Unit
+
+      - name: Verify AU bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          AU="build/Juno60AU_artefacts/Release/AU/Juno-60.component"
+          test -d "$AU"
+          test -f "$AU/Contents/Info.plist"
+          plutil -lint "$AU/Contents/Info.plist"
+          BIN="$AU/Contents/MacOS/Juno-60"
+          test -f "$BIN"
+          file "$BIN"
+          lipo -archs "$BIN"
+          lipo -verify_arch arm64 "$BIN"
+          /usr/libexec/PlistBuddy -c 'Print :AudioComponents:0:subtype' "$AU/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :AudioComponents:0:manufacturer' "$AU/Contents/Info.plist"
+
+      - name: Upload installable AU
         uses: actions/upload-artifact@v4
         with:
-          name: Juno60-AU-macOS
+          name: Juno60-AU-macOS-universal
           path: build/Juno60AU_artefacts/Release/AU/Juno-60.component
-          if-no-files-found: warn
+          if-no-files-found: error
