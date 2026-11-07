@@ -11,7 +11,7 @@ public:
 
 private:
     using Attachment = juce::AudioProcessorValueTreeState::SliderAttachment;
-    Juno60AudioProcessor& processor;
+    Juno60AudioProcessor& audioProcessor;
     juce::OwnedArray<juce::Slider> sliders;
     juce::OwnedArray<juce::Label> labels;
     std::vector<std::unique_ptr<Attachment>> attachments;
