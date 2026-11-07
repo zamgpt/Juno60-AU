@@ -39,6 +39,9 @@ jobs:
           lipo "$BIN" -verify_arch x86_64
           /usr/libexec/PlistBuddy -c 'Print :AudioComponents:0:subtype' "$AU/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c 'Print :AudioComponents:0:manufacturer' "$AU/Contents/Info.plist"
+          # auval discovers Audio Units through the standard component search paths.
+          mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
+          ditto "$AU" "$HOME/Library/Audio/Plug-Ins/Components/Juno-60.component"
           auval -v aumu Jn6A Jn60
 
       - name: Package Audio Unit
