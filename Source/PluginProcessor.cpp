@@ -198,6 +198,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout Juno60AudioProcessor::create
     return p;
 }
 
+void Juno60AudioProcessor::releaseResources()
+{
+    chorus.reset();
+}
+
 void Juno60AudioProcessor::prepareToPlay (double sr, int)
 {
     synth.setCurrentPlaybackSampleRate (sr);
