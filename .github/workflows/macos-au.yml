@@ -35,13 +35,22 @@ jobs:
           test -f "$BIN"
           file "$BIN"
           lipo -archs "$BIN"
-          lipo -verify_arch arm64 "$BIN"
+          lipo "$BIN" -verify_arch arm64
+          lipo "$BIN" -verify_arch x86_64
           /usr/libexec/PlistBuddy -c 'Print :AudioComponents:0:subtype' "$AU/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c 'Print :AudioComponents:0:manufacturer' "$AU/Contents/Info.plist"
+          auval -v aumu Jn6A Jn60
+
+      - name: Package Audio Unit
+        run: |
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent \
+            build/Juno60AU_artefacts/Release/AU/Juno-60.component \
+            dist/Juno-60-macOS-universal.component.zip
 
       - name: Upload installable AU
         uses: actions/upload-artifact@v4
         with:
           name: Juno60-AU-macOS-universal
-          path: build/Juno60AU_artefacts/Release/AU/Juno-60.component
+          path: dist/Juno-60-macOS-universal.component.zip
           if-no-files-found: error
