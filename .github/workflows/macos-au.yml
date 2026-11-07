@@ -1,0 +1,21 @@
+name: macOS AU Build
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+jobs:
+  build-au:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build AU
+        run: cmake --build build --config Release --target Juno60AU_AU --parallel 3
+      - name: Upload Audio Unit
+        uses: actions/upload-artifact@v4
+        with:
+          name: Juno60-AU-macOS
+          path: build/Juno60AU_artefacts/Release/AU/Juno-60.component
+          if-no-files-found: warn
