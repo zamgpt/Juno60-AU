@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <cmath>
 
 namespace
 {
@@ -9,6 +10,28 @@ public:
     bool appliesToNote (int) override { return true; }
     bool appliesToChannel (int) override { return true; }
 };
+
+// Polynomial band-limiting correction for discontinuous oscillator waveforms.
+// This reduces the most obvious aliasing without adding per-voice oversampling.
+float polyBlep (double phase, double increment) noexcept
+{
+    if (increment <= 0.0)
+        return 0.0f;
+
+    if (phase < increment)
+    {
+        const double x = phase / increment;
+        return static_cast<float> (x + x - x * x - 1.0);
+    }
+
+    if (phase > 1.0 - increment)
+    {
+        const double x = (phase - 1.0) / increment;
+        return static_cast<float> (x * x + x + x + 1.0);
+    }
+
+    return 0.0f;
+}
 
 class JunoVoice final : public juce::SynthesiserVoice
 {
@@ -26,6 +49,7 @@ public:
         spec.numChannels = 1;
         filter.prepare (spec);
         filter.reset();
+        filter.setType (juce::dsp::StateVariableTPTFilterType::lowpass);
         ampEnvelope.setSampleRate (sr);
     }
 
@@ -39,7 +63,6 @@ public:
         noiseLevel = noise;
         pulseWidth = pw;
         baseCutoff = cutoff;
-        filterResonance = resonance;
         filterEnvAmount = envAmount;
         ampEnvelope.setParameters ({ attack, decay, sustain, release });
         filter.setResonance (juce::jlimit (0.1f, 1.0f, 0.1f + resonance * 0.88f));
@@ -50,14 +73,19 @@ public:
         frequency = juce::MidiMessage::getMidiNoteInHertz (note);
         noteVelocity = velocity;
         phase = 0.0;
+        subPhase = 0.0;
         ampEnvelope.noteOn();
     }
 
     void stopNote (float, bool allowTailOff) override
     {
-        ampEnvelope.noteOff();
-        if (! allowTailOff)
+        if (allowTailOff)
+            ampEnvelope.noteOff();
+        else
+        {
+            ampEnvelope.reset();
             clearCurrentNote();
+        }
     }
 
     void pitchWheelMoved (int) override {}
@@ -65,10 +93,13 @@ public:
 
     void renderNextBlock (juce::AudioBuffer<float>& output, int start, int count) override
     {
-        if (frequency <= 0.0 || getSampleRate() <= 0.0)
+        const double sr = getSampleRate();
+        if (frequency <= 0.0 || sr <= 0.0)
             return;
 
-        const double phaseIncrement = frequency / getSampleRate();
+        const double phaseIncrement = frequency / sr;
+        const double subIncrement = phaseIncrement * 0.5;
+
         for (int i = 0; i < count; ++i)
         {
             if (! ampEnvelope.isActive())
@@ -78,17 +109,30 @@ public:
             }
 
             const float env = ampEnvelope.getNextSample();
-            const float saw = 2.0f * static_cast<float> (phase) - 1.0f;
-            const float pulse = phase < pulseWidth ? 1.0f : -1.0f;
-            const float sub = phase < 0.5 ? 1.0f : -1.0f;
-            const float noise = random.nextFloat() * 2.0f - 1.0f;
+            const float saw = static_cast<float> (2.0 * phase - 1.0)
+                            - polyBlep (phase, phaseIncrement);
 
+            float pulse = phase < pulseWidth ? 1.0f : -1.0f;
+            pulse += polyBlep (phase, phaseIncrement);
+            double fallingEdge = phase - pulseWidth;
+            if (fallingEdge < 0.0)
+                fallingEdge += 1.0;
+            pulse -= polyBlep (fallingEdge, phaseIncrement);
+
+            float sub = subPhase < 0.5 ? 1.0f : -1.0f;
+            sub += polyBlep (subPhase, subIncrement);
+            double subFallingEdge = subPhase - 0.5;
+            if (subFallingEdge < 0.0)
+                subFallingEdge += 1.0;
+            sub -= polyBlep (subFallingEdge, subIncrement);
+
+            const float noise = random.nextFloat() * 2.0f - 1.0f;
             float source = saw * sawLevel + pulse * pulseLevel
                          + sub * subLevel + noise * noiseLevel;
             source *= env * noteVelocity * 0.22f;
 
             const float modulatedCutoff = juce::jlimit (
-                30.0f, static_cast<float> (getSampleRate() * 0.44),
+                30.0f, static_cast<float> (sr * 0.44),
                 baseCutoff * std::pow (2.0f, env * filterEnvAmount * 4.0f));
             filter.setCutoffFrequency (modulatedCutoff);
             const float filtered = filter.processSample (0, source);
@@ -96,6 +140,10 @@ public:
             phase += phaseIncrement;
             if (phase >= 1.0)
                 phase -= 1.0;
+
+            subPhase += subIncrement;
+            if (subPhase >= 1.0)
+                subPhase -= 1.0;
 
             for (int channel = 0; channel < output.getNumChannels(); ++channel)
                 output.addSample (channel, start + i, filtered);
@@ -105,9 +153,10 @@ public:
 private:
     double frequency = 440.0;
     double phase = 0.0;
+    double subPhase = 0.0;
     float noteVelocity = 0.8f;
     float sawLevel = 0.8f, pulseLevel = 0.0f, subLevel = 0.0f, noiseLevel = 0.0f;
-    float pulseWidth = 0.5f, baseCutoff = 12000.0f, filterResonance = 0.1f, filterEnvAmount = 0.0f;
+    float pulseWidth = 0.5f, baseCutoff = 12000.0f, filterEnvAmount = 0.0f;
     juce::ADSR ampEnvelope;
     juce::dsp::StateVariableTPTFilter<float> filter;
     juce::Random random;
@@ -118,7 +167,6 @@ Juno60AudioProcessor::Juno60AudioProcessor()
     : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       parameters (*this, nullptr, "PARAMETERS", createParameterLayout())
 {
-    // The original Juno-60 is a six-voice instrument.
     for (int i = 0; i < 6; ++i)
         synth.addVoice (new JunoVoice());
     synth.addSound (new JunoSound());
@@ -147,7 +195,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout Juno60AudioProcessor::create
 
 void Juno60AudioProcessor::prepareToPlay (double sr, int)
 {
-    sampleRate = sr;
     synth.setCurrentPlaybackSampleRate (sr);
     for (int i = 0; i < synth.getNumVoices(); ++i)
         if (auto* voice = dynamic_cast<JunoVoice*> (synth.getVoice (i)))
