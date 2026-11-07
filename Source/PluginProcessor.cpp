@@ -64,8 +64,10 @@ public:
         pulseWidth = pw;
         baseCutoff = cutoff;
         filterEnvAmount = envAmount;
-        ampEnvelope.setParameters ({ attack, decay, sustain, release });
-        filter.setResonance (juce::jlimit (0.1f, 1.0f, 0.1f + resonance * 0.88f));
+        // JUCE ADSR parameters must not be changed while a note is active.
+        // Apply the latest values at the next note-on instead.
+        ampParameters = { attack, decay, sustain, release };
+        filter.setResonance (0.70710678f + resonance * 4.0f);
     }
 
     void startNote (int note, float velocity, juce::SynthesiserSound*, int) override
@@ -74,6 +76,8 @@ public:
         noteVelocity = velocity;
         phase = 0.0;
         subPhase = 0.0;
+        ampEnvelope.reset();
+        ampEnvelope.setParameters (ampParameters);
         ampEnvelope.noteOn();
     }
 
@@ -158,6 +162,7 @@ private:
     float sawLevel = 0.8f, pulseLevel = 0.0f, subLevel = 0.0f, noiseLevel = 0.0f;
     float pulseWidth = 0.5f, baseCutoff = 12000.0f, filterEnvAmount = 0.0f;
     juce::ADSR ampEnvelope;
+    juce::ADSR::Parameters ampParameters { 0.01f, 0.8f, 0.8f, 0.25f };
     juce::dsp::StateVariableTPTFilter<float> filter;
     juce::Random random;
 };
