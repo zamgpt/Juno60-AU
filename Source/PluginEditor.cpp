@@ -1,7 +1,7 @@
 #include "PluginEditor.h"
 
 Juno60AudioProcessorEditor::Juno60AudioProcessorEditor (Juno60AudioProcessor& p)
-    : AudioProcessorEditor (&p), processor (p)
+    : AudioProcessorEditor (&p), audioProcessor (p)
 {
     setSize (1080, 570);
     const std::array<std::pair<const char*, const char*>, 13> defs {{
@@ -25,7 +25,7 @@ Juno60AudioProcessorEditor::Juno60AudioProcessorEditor (Juno60AudioProcessor& p)
         label->setJustificationType (juce::Justification::centred);
         label->setFont (juce::Font (juce::FontOptions (10.0f, juce::Font::bold)));
         addAndMakeVisible (label);
-        attachments.push_back (std::make_unique<Attachment> (processor.parameters, item.first, *slider));
+        attachments.push_back (std::make_unique<Attachment> (audioProcessor.parameters, item.first, *slider));
     }
 }
 
