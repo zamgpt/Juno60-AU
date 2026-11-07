@@ -45,17 +45,26 @@ void Juno60AudioProcessorEditor::paint (juce::Graphics& g)
     g.setColour (juce::Colour (0xff66727e));
     g.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::bold)));
     g.drawText ("DCO", 28, 98, 330, 20, juce::Justification::left);
-    g.drawText ("VCF / VCA", 390, 98, 330, 20, juce::Justification::left);
-    g.drawText ("ENVELOPE / CHORUS", 752, 98, 300, 20, juce::Justification::left);
+    g.drawText ("VCF", 390, 98, 330, 20, juce::Justification::left);
+    g.drawText ("ENVELOPE / CHORUS", 28, 342, 400, 20, juce::Justification::left);
 }
 
 void Juno60AudioProcessorEditor::resized()
 {
-    const int x0 = 20, y = 145, sliderW = 78, sliderH = 175, gap = 4;
+    constexpr int columns = 7;
+    constexpr int cellWidth = 145;
+    constexpr int sliderWidth = 130;
+    constexpr int sliderHeight = 160;
+    constexpr int left = 22;
+    const int rowY[] = { 145, 390 };
+
     for (int i = 0; i < sliders.size(); ++i)
     {
-        const int x = x0 + i * (sliderW + gap);
-        sliders[i]->setBounds (x, y, sliderW, sliderH);
-        labels[i]->setBounds (x - 2, y - 28, sliderW + 4, 24);
+        const int row = i / columns;
+        const int column = i % columns;
+        const int x = left + column * cellWidth;
+        const int y = rowY[row];
+        sliders[i]->setBounds (x, y, sliderWidth, sliderHeight);
+        labels[i]->setBounds (x, y - 25, sliderWidth, 22);
     }
 }
